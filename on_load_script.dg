@@ -1,0 +1,101 @@
+// Grab all of our CRM users and create our User map ---------------
+// ----------------
+crmUsers = invokeurl
+[
+	url :"https://www.zohoapis.com/crm/v3/users"
+	type :GET
+	connection:"zohocrm"
+];
+// info crmUsers;
+string = "";
+userList = list();
+for each  user in crmUsers.get("users")
+{
+	name = user.get("full_name");
+	userID = user.get("id");
+	userList.add(name);
+	string = string + "\"" + name + "\"" + ":" + userID + ",";
+}
+userMap = "{" + string + "}";
+input.User_Map = userMap;
+input.Account_Owner:ui.add(userList);
+// -------------------
+// If Account ID is not empty -----------------
+if(input.Account_ID != "")
+{
+	// Grab the account and its related Contacts ----------------------
+	// ----------------
+	account = zoho.crm.getRecordById("Accounts",input.Account_ID.toNumber());
+	// 	info account;
+	input.Account_Name = account.get("Account_Name");
+	input.Website = account.get("Website");
+	input.Address.country = account.get("Shipping_Country");
+	input.Address.district_city = account.get("Shipping_City");
+	input.Address.address_line_1 = account.get("Shipping_Street");
+	input.Address.state_province = account.get("Shipping_State");
+	input.Address.postal_Code = account.get("Shipping_Code");
+	input.Account_Owner = account.get("Owner").get("name");
+	input.Account_Type = account.get("Account_Type");
+	// 	Create our Contact map and prepopulate the Main contact dropdown --------------------
+	// Use a COQL query to grab all the related Contacts
+	queryMap = Map();
+	queryMap.put({"select_query":"select First_Name, Full_Name, Last_Name, Follow_up_Date, Email, Department from Contacts where Account_Name.id like " + input.Account_ID});
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.com/crm/v3/coql"
+		type :POST
+		parameters:queryMap.toString()
+		connection:"crmcoql"
+	];
+	info response;
+	contacts = response.get("data");
+	string = "";
+	contactList = list();
+	for each  con in contacts
+	{
+		// Creating contacts map -----------
+		// ---------
+		contactName = con.get("Full_Name");
+		conID = con.get("id");
+		contactList.add(contactName);
+		string = string + "\"" + contactName + "\"" + ":" + conID + ",";
+		// Creating collection for new row -----------
+		// ----------
+		newRow = Account_Contacts.Contacts();
+		newRow.First_Name1=con.get("First_Name");
+		newRow.Last_Name=con.get("Last_Name");
+		newRow.Email=con.get("Email");
+		newRow.Department=con.get("Department");
+		newRow.Contact_ID=con.get("id");
+		if(con.get("Follow_up_Date") != null)
+		{
+			info daysBetween(con.get("Follow_up_Date").toDate("yyyy-MM-dd"),today);
+			if(daysBetween(con.get("Follow_up_Date").toDate("yyyy-MM-dd"),today) < 0)
+			{
+				newRow.Follow_Up_Date=con.get("Follow_up_Date").toDate("yyyy-MM-dd");
+				newRow.Existing_Task=true;
+			}
+		}
+		contactRows = Collection();
+		contactRows.insert(newRow);
+		input.Contacts.insert(contactRows);
+	}
+	contactMap = "{" + string + "}";
+	input.Contact_Map = contactMap;
+	input.Main_Contact:ui.add(contactList);
+	if(account.get("Main_Contact") != null)
+	{
+		input.Main_Contact = account.get("Main_Contact").get("name");
+	}
+	// ----------------
+	// Hide certain fields ----------------------
+	hide newAccountNotes;
+	info "Grabbed account and prepopulated data";
+}
+else
+{
+	// Show the specific instructions for creating account/contacts and hide some fields --------------
+	hide Main_Contact;
+	show newAccountNotes;
+	info "Going to create new account/contacts";
+}
