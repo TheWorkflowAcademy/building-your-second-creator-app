@@ -1,0 +1,168 @@
+userMap = input.User_Map.toMap();
+if(input.Account_ID != "")
+{
+	// 	Run account and contact update actions
+	contactMap = input.Contact_Map.toMap();
+	accountUpdate = zoho.crm.updateRecord("Accounts",input.Account_ID.toNumber(),{"Account_Name":input.Account_Name,"Owner":userMap.get(input.Account_Owner),"Website":input.Website,"Account_Type":input.Account_Type,"Shipping_Country":input.Address.country,"Shipping_State":input.Address.state_province,"Shipping_Street":input.Address.address_line_1,"Shipping_City":input.Address.district_city,"Shipping_Code":input.Address.postal_Code,"Main_Contact":contactMap.get(input.Main_Contact)});
+	info accountUpdate;
+	if(input.Notes != "")
+	{
+		// Add a note to the Account record
+		info "going to add a note to account";
+		note1 = Map();
+		note1.put("Note_Content",input.Notes);
+		note1.put("Parent_Id",input.Account_ID);
+		note1.put("se_module","Accounts");
+		dataList = List();
+		dataList.add(note1);
+		params = Map();
+		params.put("data",dataList);
+		response = invokeurl
+		[
+			url :"https://www.zohoapis.com/crm/v3/Notes"
+			type :POST
+			parameters:params.toString()
+			connection:"zohocrm"
+		];
+		info response;
+	}
+	for each  con in Contacts
+	{
+		if(con.Contact_ID != null)
+		{
+			contactUpdate = zoho.crm.updateRecord("Contacts",con.Contact_ID.toNumber(),{"First_Name":con.First_Name1,"Last_Name":con.Last_Name,"Email":con.Email,"Department":con.Department,"Follow_up_Date":con.Follow_Up_Date});
+			info "Updated the contact record of " + con.First_Name1;
+			if(con.Follow_Up_Date != null && con.Existing_Task = false)
+			{
+				// Add a task to follow up with this contact
+				info "going to add a task";
+				taskMap = Map();
+				taskMap.put("Who_Id",con.Contact_ID);
+				// 				taskMap.put("$se_module","Contacts");
+				taskMap.put("Due_Date",con.Follow_Up_Date);
+				taskMap.put("Priority","High");
+				taskMap.put("Subject","Follow up with " + con.First_Name1 + " " + con.Last_Name);
+				taskMap.put("Status","Not Started");
+				createTask = zoho.crm.createRecord("Tasks",taskMap);
+				info "Created task for " + con.First_Name1 + ": " + createTask;
+			}
+			if(con.Notes != null)
+			{
+				// Add a Note to this record
+				info "going to add a note";
+				note1 = Map();
+				note1.put("Note_Content",con.Notes);
+				note1.put("Parent_Id",con.Contact_ID);
+				note1.put("se_module","Contacts");
+				dataList = List();
+				dataList.add(note1);
+				params = Map();
+				params.put("data",dataList);
+				response = invokeurl
+				[
+					url :"https://www.zohoapis.com/crm/v3/Notes"
+					type :POST
+					parameters:params.toString()
+					connection:"zohocrm"
+				];
+				info response;
+			}
+		}
+		else
+		{
+			// 			Create a new contact and relate it to the right Account
+			contactCreate = zoho.crm.createRecord("Contacts",{"First_Name":con.First_Name1,"Last_Name":con.Last_Name,"Email":con.Email,"Department":con.Department,"Follow_up_Date":con.Follow_Up_Date,"Account_Name":input.Account_ID});
+			info "Created new contact: " + contactCreate;
+			contactID = contactCreate.get("id");
+			if(con.Notes != null)
+			{
+				// Add a note recored
+				info "going to add a note";
+				note1 = Map();
+				note1.put("Note_Content",con.Notes);
+				note1.put("Parent_Id",contactID);
+				note1.put("se_module","Contacts");
+				dataList = List();
+				dataList.add(note1);
+				params = Map();
+				params.put("data",dataList);
+				response = invokeurl
+				[
+					url :"https://www.zohoapis.com/crm/v3/Notes"
+					type :POST
+					parameters:params.toString()
+					connection:"zohocrm"
+				];
+				info response;
+			}
+			if(con.Follow_Up_Date != null && con.Existing_Task = false)
+			{
+				// Add a task to follow up with this contact
+				info "going to add a task";
+				taskMap = Map();
+				taskMap.put("Who_Id",contactID);
+				// 				taskMap.put("$se_module","Contacts");
+				taskMap.put("Due_Date",con.Follow_Up_Date);
+				taskMap.put("Priority","High");
+				taskMap.put("Subject","Follow up with " + con.First_Name1 + " " + con.Last_Name);
+				taskMap.put("Status","Not Started");
+				createTask = zoho.crm.createRecord("Tasks",taskMap);
+			}
+		}
+	}
+}
+else
+{
+	// Create the Account and create Contacts
+	accountCreate = zoho.crm.createRecord("Accounts",{"Account_Name":input.Account_Name,"Owner":userMap.get(input.Account_Owner),"Website":input.Website,"Account_Type":input.Account_Type,"Shipping_Country":input.Address.country,"Shipping_State":input.Address.state_province,"Shipping_Street":input.Address.address_line_1,"Shipping_City":input.Address.district_city,"Shipping_Code":input.Address.postal_Code});
+	info "Create new account: " + accountCreate;
+	newAccountId = accountCreate.get("id");
+	firstCon = true;
+	for each  new in Contacts
+	{
+		contactCreate = zoho.crm.createRecord("Contacts",{"First_Name":new.First_Name1,"Last_Name":new.Last_Name,"Email":new.Email,"Department":new.Department,"Follow_up_Date":new.Follow_Up_Date});
+		info "Created new contact for " + new.First_Name1 + " " + new.Last_Name;
+		contactID = contactCreate.get("id");
+		if(firstCon)
+		{
+			// Make the first contact the MAIN CONTACT of the new Account
+			updateNewAccount = zoho.crm.updateRecord("Accounts",newAccountId.toNumber(),{"Main_Contact":contactID});
+			info "Updated new account with the main contact: " + updateNewAccount;
+			firstCon = false;
+		}
+		if(new.Follow_Up_Date != null && con.Existing_Task = false)
+		{
+			// Add a task to follow up with this contact
+			info "going to add a task";
+			taskMap = Map();
+			taskMap.put("What_Id",contactID);
+			taskMap.put("$se_module","Contacts");
+			taskMap.put("Due_Date",con.Follow_Up_Date);
+			taskMap.put("Priority","High");
+			taskMap.put("Subject","Follow up with " + new.First_Name1 + " " + new.Last_Name);
+			taskMap.put("Status","Not Started");
+			createTask = zoho.crm.createRecord("Tasks",taskMap);
+		}
+		if(new.Notes != null)
+		{
+			// Add a Note to this record
+			info "going to add a note";
+			note1 = Map();
+			note1.put("Note_Content",new.Notes);
+			note1.put("Parent_Id",contactID);
+			note1.put("se_module","Contacts");
+			dataList = List();
+			dataList.add(note1);
+			params = Map();
+			params.put("data",dataList);
+			response = invokeurl
+			[
+				url :"https://www.zohoapis.com/crm/v3/Notes"
+				type :POST
+				parameters:params.toString()
+				connection:"zohocrm"
+			];
+			info response;
+		}
+	}
+}
